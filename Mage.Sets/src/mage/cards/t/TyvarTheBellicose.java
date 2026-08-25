@@ -19,7 +19,6 @@ import mage.filter.StaticFilters;
 import mage.filter.common.FilterCreaturePermanent;
 import mage.game.Game;
 import mage.game.events.GameEvent;
-import mage.game.permanent.Permanent;
 
 import java.util.UUID;
 
@@ -96,25 +95,21 @@ class TyvarTheBellicoseTriggeredAbility extends TriggeredAbilityImpl {
         if (isControlledBy(event.getPlayerId()) && event.getSourceId().equals(getSourceId())) {
             Ability ability = game.getAbility(event.getTargetId(), event.getSourceId()).orElse(null);
 
-            // Fallback for granted abilities (e.g., from Enduring Vitality or Cryptolith Rite)
-            // where game.getAbility might fail to fetch the dynamically created stack/activation ID.
-            if (ability == null && event.getTargetId() != null) {
-                Permanent permanent = game.getPermanentOrLKIBattlefield(event.getSourceId());
-                if (permanent != null) {
-                    for (Ability a : permanent.getAbilities(game)) {
-                        if (event.getTargetId().equals(a.getId()) || event.getTargetId().equals(a.getOriginalId())) {
-                            ability = a;
-                            break;
-                        }
-                    }
+            // 1. Standard exact match lookup for inherent abilities
+            if (ability != null) {
+                if (ability instanceof ManaAbility) {
+                    this.getEffects().setValue("damage", event.getAmount());
+                    return true;
                 }
+                return false;
             }
 
-            // If ability is still null, it is highly safe to assume it's a mana ability,
-            // as non-mana abilities that produce mana and fail all lookups are essentially nonexistent here.
-            boolean isManaAbility = (ability == null || ability instanceof ManaAbility);
+            // 2. Fallback for dynamically granted abilities.
+            // True mana abilities do not use the stack.
+            boolean usesStack = game.getStack().getStackObject(event.getTargetId()) != null
+                    || game.getLastKnownInformation(event.getTargetId(), Zone.STACK) != null;
 
-            if (isManaAbility) {
+            if (!usesStack) {
                 this.getEffects().setValue("damage", event.getAmount());
                 return true;
             }
